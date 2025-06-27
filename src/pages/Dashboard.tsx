@@ -2,97 +2,212 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, MapPin, AlertCircle, ArrowRightLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { 
+  Users, 
+  MapPin, 
+  AlertCircle, 
+  ArrowRightLeft, 
+  Camera,
+  FileText,
+  TrendingUp,
+  Sync,
+  Database,
+  CheckCircle,
+  Clock,
+  Map
+} from 'lucide-react';
+import RecentActivityFeed from '@/components/RecentActivityFeed';
+import WeeklyTrendsChart from '@/components/WeeklyTrendsChart';
+import SyncStatusOverview from '@/components/SyncStatusOverview';
+import GeographicOverview from '@/components/GeographicOverview';
 
-interface DashboardStats {
-  totalFarmers: number;
-  totalVisits: number;
-  totalIssues: number;
-  totalTransfers: number;
-  totalFieldOfficers: number;
+interface DashboardMetrics {
+  todaySubmissions: number;
+  farmPolygonsMapped: number;
+  monthlyMediaFiles: number;
+  activeFieldOfficers: number;
+  pendingReviews: number;
+  reportsSubmitted: number;
+  dataQualityScore: number;
+  syncSuccessRate: number;
 }
 
 const Dashboard = () => {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalFarmers: 0,
-    totalVisits: 0,
-    totalIssues: 0,
-    totalTransfers: 0,
-    totalFieldOfficers: 0,
+  const [metrics, setMetrics] = useState<DashboardMetrics>({
+    todaySubmissions: 0,
+    farmPolygonsMapped: 0,
+    monthlyMediaFiles: 0,
+    activeFieldOfficers: 0,
+    pendingReviews: 0,
+    reportsSubmitted: 0,
+    dataQualityScore: 0,
+    syncSuccessRate: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchMetrics = async () => {
       try {
-        const [farmersResult, visitsResult, issuesResult, transfersResult, officersResult] = await Promise.all([
-          supabase.from('farmers').select('*', { count: 'exact', head: true }),
-          supabase.from('farm_visits').select('*', { count: 'exact', head: true }),
-          supabase.from('issues').select('*', { count: 'exact', head: true }),
-          supabase.from('transfer_requests').select('*', { count: 'exact', head: true }),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'field_officer'),
-        ]);
+        const today = new Date().toISOString().split('T')[0];
+        const thisMonth = new Date().toISOString().substring(0, 7);
 
-        setStats({
-          totalFarmers: farmersResult.count || 0,
-          totalVisits: visitsResult.count || 0,
-          totalIssues: issuesResult.count || 0,
-          totalTransfers: transfersResult.count || 0,
-          totalFieldOfficers: officersResult.count || 0,
+        // Get today's submissions
+        const { count: todaySubmissions } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', `${today}T00:00:00.000Z`)
+          .lt('created_at', `${today}T23:59:59.999Z`);
+
+        // Get farm polygons mapped (visits with polygon data)
+        const { count: farmPolygonsMapped } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true })
+          .not('polygon_boundaries', 'is', null);
+
+        // Get monthly media files
+        const { count: monthlyMediaFiles } = await supabase
+          .from('visit_media')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', `${thisMonth}-01T00:00:00.000Z`);
+
+        // Get active field officers (officers who submitted data in last 7 days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const { data: activeOfficersData } = await supabase
+          .from('farm_visits')
+          .select('field_officer_id')
+          .gte('created_at', sevenDaysAgo.toISOString());
+
+        const activeFieldOfficers = new Set(activeOfficersData?.map(v => v.field_officer_id) || []).size;
+
+        // Get pending reviews (open issues)
+        const { count: pendingReviews } = await supabase
+          .from('issues')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'open');
+
+        // Get reports submitted (completed visits this month)
+        const { count: reportsSubmitted } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'completed')
+          .gte('created_at', `${thisMonth}-01T00:00:00.000Z`);
+
+        // Calculate data quality score (visits with complete GPS data)
+        const { count: totalVisits } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true });
+
+        const { count: qualityVisits } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true })
+          .not('gps_latitude', 'is', null)
+          .not('gps_longitude', 'is', null);
+
+        const dataQualityScore = totalVisits > 0 ? Math.round((qualityVisits / totalVisits) * 100) : 0;
+
+        // Calculate sync success rate (completed vs total visits)
+        const { count: completedVisits } = await supabase
+          .from('farm_visits')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'completed');
+
+        const syncSuccessRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
+
+        setMetrics({
+          todaySubmissions: todaySubmissions || 0,
+          farmPolygonsMapped: farmPolygonsMapped || 0,
+          monthlyMediaFiles: monthlyMediaFiles || 0,
+          activeFieldOfficers,
+          pendingReviews: pendingReviews || 0,
+          reportsSubmitted: reportsSubmitted || 0,
+          dataQualityScore,
+          syncSuccessRate,
         });
       } catch (error) {
-        console.error('Error fetching stats:', error);
+        console.error('Error fetching dashboard metrics:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStats();
+    fetchMetrics();
   }, []);
 
-  const statCards = [
+  const metricCards = [
     {
-      title: 'Total Farmers',
-      value: stats.totalFarmers,
-      icon: Users,
+      title: 'Data Submissions Today',
+      value: metrics.todaySubmissions,
+      icon: Database,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      description: 'Photos, videos, and polygons received',
     },
     {
-      title: 'Field Officers',
-      value: stats.totalFieldOfficers,
-      icon: Users,
+      title: 'Farm Polygons Mapped',
+      value: metrics.farmPolygonsMapped,
+      icon: Map,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
+      description: 'GPS boundaries submitted',
     },
     {
-      title: 'Farm Visits',
-      value: stats.totalVisits,
-      icon: MapPin,
+      title: 'Media Files (Month)',
+      value: metrics.monthlyMediaFiles,
+      icon: Camera,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
+      description: 'Photos and videos uploaded',
     },
     {
-      title: 'Open Issues',
-      value: stats.totalIssues,
-      icon: AlertCircle,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
-    },
-    {
-      title: 'Transfer Requests',
-      value: stats.totalTransfers,
-      icon: ArrowRightLeft,
+      title: 'Active Field Officers',
+      value: metrics.activeFieldOfficers,
+      icon: Users,
       color: 'text-orange-600',
       bgColor: 'bg-orange-50',
+      description: 'Currently submitting data',
+    },
+    {
+      title: 'Pending Reviews',
+      value: metrics.pendingReviews,
+      icon: Clock,
+      color: 'text-red-600',
+      bgColor: 'bg-red-50',
+      description: 'Awaiting supervisor approval',
+    },
+    {
+      title: 'Reports Submitted',
+      value: metrics.reportsSubmitted,
+      icon: FileText,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      description: 'Completed this month',
+    },
+    {
+      title: 'Data Quality Score',
+      value: `${metrics.dataQualityScore}%`,
+      icon: CheckCircle,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      description: 'GPS accuracy & completeness',
+    },
+    {
+      title: 'Sync Success Rate',
+      value: `${metrics.syncSuccessRate}%`,
+      icon: Sync,
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50',
+      description: 'Mobile app sync success',
     },
   ];
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {[...Array(5)].map((_, i) => (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
             <Card key={i} className="animate-pulse">
               <CardContent className="p-6">
                 <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
@@ -109,15 +224,16 @@ const Dashboard = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
-          Dashboard Overview
+          Admin Dashboard
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Welcome to your Farmetrics admin dashboard
+          Real-time monitoring and management of field operations
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {statCards.map((card) => (
+      {/* Metrics Cards Grid */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {metricCards.map((card) => (
           <Card key={card.title} className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">
@@ -129,39 +245,22 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900">{card.value}</div>
+              <p className="text-xs text-gray-500 mt-1">{card.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {/* Charts and Analytics Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-500">No recent activity to display.</p>
-          </CardContent>
-        </Card>
+        <WeeklyTrendsChart />
+        <SyncStatusOverview />
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex flex-col space-y-2">
-              <button className="text-left text-sm text-blue-600 hover:text-blue-800">
-                View Field Officers
-              </button>
-              <button className="text-left text-sm text-blue-600 hover:text-blue-800">
-                Review Issues
-              </button>
-              <button className="text-left text-sm text-blue-600 hover:text-blue-800">
-                Approve Transfers
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Geographic and Activity Row */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <GeographicOverview />
+        <RecentActivityFeed />
       </div>
     </div>
   );
