@@ -1,9 +1,8 @@
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Clock, AlertCircle, Sync } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface SyncStatus {
@@ -103,7 +102,7 @@ const SyncStatusOverview = () => {
       case 'error':
         return <AlertCircle className="h-4 w-4 text-red-600" />;
       default:
-        return <Sync className="h-4 w-4 text-gray-600" />;
+        return <RefreshCw className="h-4 w-4 text-gray-600" />;
     }
   };
 

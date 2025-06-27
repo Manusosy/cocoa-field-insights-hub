@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +10,7 @@ import {
   Camera,
   FileText,
   TrendingUp,
-  Sync,
+  RefreshCw,
   Database,
   CheckCircle,
   Clock,
@@ -196,7 +195,7 @@ const Dashboard = () => {
     {
       title: 'Sync Success Rate',
       value: `${metrics.syncSuccessRate}%`,
-      icon: Sync,
+      icon: RefreshCw,
       color: 'text-teal-600',
       bgColor: 'bg-teal-50',
       description: 'Mobile app sync success',
