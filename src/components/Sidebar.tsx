@@ -8,7 +8,8 @@ import {
   AlertCircle, 
   ArrowRightLeft, 
   Settings,
-  Home
+  Home,
+  FileText
 } from 'lucide-react';
 
 const navigation = [
@@ -16,6 +17,7 @@ const navigation = [
   { name: 'Field Officers', href: '/officers', icon: Users },
   { name: 'Farmers', href: '/farmers', icon: Users },
   { name: 'Farm Visits', href: '/visits', icon: MapPin },
+  { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Issues', href: '/issues', icon: AlertCircle },
   { name: 'Transfer Requests', href: '/transfers', icon: ArrowRightLeft },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
